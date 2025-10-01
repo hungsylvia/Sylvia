@@ -1,1 +1,310 @@
 # Sylvia
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>今天我要吃什麼 (新竹市) - 餐期篩選版</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <style>
+        /* 自定義按鈕動畫 */
+        @keyframes bounce-spin {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.03); }
+        }
+        .spin-active {
+            animation: bounce-spin 0.3s infinite alternate;
+        }
+        /* 視覺效果：讓選中的結果更突出 */
+        .result-highlight {
+            transition: all 0.5s ease-in-out;
+            text-shadow: 0 0 10px rgba(254, 215, 170, 0.8);
+        }
+        /* Radio button 樣式 */
+        .meal-radio {
+            appearance: none;
+            width: 0;
+            height: 0;
+        }
+        .meal-label {
+            cursor: pointer;
+            padding: 8px 16px;
+            border-radius: 9999px;
+            font-weight: 600;
+            color: #4B5563; /* Gray-600 */
+            background-color: #E5E7EB; /* Gray-200 */
+            transition: all 0.2s;
+        }
+        .meal-radio:checked + .meal-label {
+            color: white;
+            background-color: #0D9488; /* Teal-600 */
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.1);
+        }
+    </style>
+</head>
+<body class="bg-gray-50 min-h-screen flex items-center justify-center p-4">
+
+    <div class="w-full max-w-lg p-8 bg-white rounded-xl shadow-2xl transition duration-500 hover:shadow-3xl">
+        
+        <header class="text-center mb-8">
+            <h1 class="text-4xl font-extrabold text-teal-600 mb-2">今天我要吃什麼？</h1>
+            <p class="text-lg text-gray-600">新竹市美食命運決定機 (餐期篩選)</p>
+        </header>
+
+        <div class="text-center mb-6">
+            <label class="block text-gray-700 font-bold mb-3">請選擇想用餐的時段：</label>
+            <div id="meal-time-selector" class="flex justify-center flex-wrap gap-4">
+                <input type="radio" id="time-morning" name="meal-time" value="morning" class="meal-radio">
+                <label for="time-morning" class="meal-label">🌞 早餐 / 早午餐</label>
+                
+                <input type="radio" id="time-noon" name="meal-time" value="noon" class="meal-radio">
+                <label for="time-noon" class="meal-label">🍔 午餐</label>
+                
+                <input type="radio" id="time-evening" name="meal-time" value="evening" class="meal-radio" checked>
+                <label for="time-evening" class="meal-label">🍽️ 晚餐</label>
+                
+                <input type="radio" id="time-late" name="meal-time" value="late_night" class="meal-radio">
+                <label for="time-late" class="meal-label">🌜 宵夜</label>
+            </div>
+        </div>
+        <div class="text-center mb-6 h-20 flex items-center justify-center">
+            <p id="result-display" class="text-3xl font-bold text-gray-800 transition duration-500">
+                點擊下方按鈕開始！
+            </p>
+        </div>
+
+        <div id="final-restaurant-display" class="hidden text-center mb-6 p-4 border border-teal-200 bg-teal-50 rounded-lg">
+            <h4 class="text-xl font-bold text-teal-700 mb-2">幸運星推薦：<span id="chosen-restaurant" class="text-orange-600"></span></h4>
+            <p class="text-sm text-gray-600" id="chosen-category-text"></p>
+        </div>
+
+        <div class="text-center">
+            <button id="spin-button" class="bg-orange-500 hover:bg-orange-600 text-white font-bold py-4 px-10 rounded-full transition duration-300 transform hover:scale-105 shadow-lg flex items-center justify-center mx-auto space-x-2">
+                <i class="fas fa-utensils text-xl"></i>
+                <span id="button-text" class="text-xl">轉！</span>
+            </button>
+        </div>
+
+        <div id="info-links-container" class="mt-6 flex flex-wrap justify-center gap-3 hidden">
+             <a id="link-map" href="#" target="_blank" class="info-link bg-teal-500 hover:bg-teal-600 text-white font-semibold py-2 px-4 rounded-lg transition duration-200 text-sm"><i class="fas fa-map-marker-alt mr-1"></i> (若嵌入失敗) 另開地圖</a>
+        </div>
+
+        <section id="map-container" class="mt-8 pt-4 border-t border-gray-100 hidden">
+            <h3 class="text-xl font-semibold text-gray-700 mb-3 text-center">地圖位置 (嵌入)：</h3>
+            <iframe id="map-iframe" width="100%" height="400" frameborder="0" style="border:0;" allowfullscreen="" loading="lazy" referrerpolicy="no-referrer-when-downgrade" class="rounded-lg shadow-inner"></iframe>
+            <p class="text-xs text-gray-400 mt-2 text-center">備註：地圖可能會因 Google 安全政策而無法顯示，請點擊上方的「另開地圖」。</p>
+        </section>
+        <div class="mt-8 pt-6 border-t border-gray-100 text-center">
+            <p class="text-sm text-gray-500">
+                目前參與轉盤的類別：
+                <span id="category-list" class="text-xs italic text-gray-400"></span>
+            </p>
+        </div>
+
+    </div>
+
+    <script>
+        // 1. **數據結構與餐期定義**：
+        const foodData = [
+            {
+                category: "日式拉麵",
+                meal_times: ["noon", "evening"],
+                restaurants: ["大海拉麵", "麵堂", "太河拉麵", "寫樂拉麵", "緣者拉麵", "一樂拉麵 (竹科)", "銀座炎堂拉麵"]
+            },
+            {
+                category: "日式壽司/居酒屋",
+                meal_times: ["evening", "late_night"],
+                restaurants: ["京町家日式串燒居酒屋", "山上走走日式無菜單燒肉", "喜憨兒創作料理 (日式吃到飽)", "家竹亭 (日式定食)", "竹子居酒屋", "新橋食堂 (日式/港點)"]
+            },
+            {
+                category: "經典台式小吃",
+                meal_times: ["morning", "noon", "evening", "late_night"], // 許多小吃全天營業
+                restaurants: ["鴨肉許 (中正路/許二姊)", "柳家肉燥飯", "翁記滷肉飯", "新竹在地米粉/貢丸", "西市米粉湯", "老黃豬腳大王", "鷹王肉圓", "曾記餡餅", "北門炸粿", "中央市場糯米水餃"]
+            },
+            {
+                category: "特色麵食/快餐",
+                meal_times: ["morning", "noon", "evening"],
+                restaurants: ["段純貞牛肉麵 (武陵店)", "厚醍牛肉麵", "龍昌小館 (麵食/快餐)", "牽漿店 (傳統小吃)", "阿婆早餐麵店 (炒手麵)", "唯仔魷魚羹麵"]
+            },
+            {
+                category: "麻辣鍋/薑母鴨",
+                meal_times: ["evening", "late_night"],
+                restaurants: ["老四川巴蜀麻辣燙 (竹北)", "孔金麻辣鍋", "老瀋陽酸白菜鍋", "老店薑母雞 (冬令進補)", "姜麻辣小火鍋", "長興釣蝦場 (熱炒/麻辣臭豆腐)"]
+            },
+            {
+                category: "一般火鍋/吃到飽",
+                meal_times: ["noon", "evening"],
+                restaurants: ["海底撈 (大遠百)", "千葉火鍋", "九品小火鍋", "鍋湯匯 (24H小火鍋)", "築間幸福鍋物", "聚北海道昆布鍋"]
+            },
+            {
+                category: "義式/歐式餐廳",
+                meal_times: ["noon", "evening"],
+                restaurants: ["義式屋古拉爵 (大遠百)", "凡妮莎南歐花園餐廳", "墨咖啡 (義式)", "窯烤披薩工坊", "托斯卡尼尼 (竹科)", "曼托瓦義式廚房", "斑馬騷莎美義餐廳"]
+            },
+            {
+                category: "美式餐廳/牛排",
+                meal_times: ["noon", "evening"],
+                restaurants: ["史坦利美式牛排", "A CUT牛排館 (國賓)", "LALA Kitchen (新美式)", "貳樓餐廳 (新竹店)", "麥當勞 (新竹車站)", "漢堡王 (巨城)", "美式廚房"]
+            },
+            {
+                category: "港式飲茶/點心",
+                meal_times: ["noon", "evening"],
+                restaurants: ["珍悅港式點心坊", "晶悅港式飲茶", "蒸籠港式飲茶", "大四喜港式點心", "新橋食堂 (港點)"]
+            },
+            {
+                category: "泰式/南洋料理",
+                meal_times: ["noon", "evening"],
+                restaurants: ["瓦城 (巨城/大遠百)", "晶湯匙泰式主題餐廳", "藍象廷泰式火鍋吃到飽", "泰之味泰式料理", "晶湯匙"]
+            },
+            {
+                category: "韓式料理/燒肉",
+                meal_times: ["noon", "evening"],
+                restaurants: ["姜滿堂正宗韓國直火燒肉", "韓國館", "銅盤韓式烤肉", "兩餐韓國年糕火鍋吃到飽"]
+            },
+            {
+                category: "早午餐/輕食",
+                meal_times: ["morning", "noon"],
+                restaurants: ["阿婆早餐麵店 (早午餐)", "欣園早點", "好事咖啡", "Subway", "或者書店餐飲", "喜木咖啡 (早午餐)", "鐵三角碳烤吐司 (輕食)"]
+            },
+            {
+                category: "咖啡/甜點",
+                meal_times: ["morning", "noon", "evening"],
+                restaurants: ["墨咖啡", "小墊子 I'm Mat", "遇見咖啡", "卡比咖啡 (貓餐廳)", "透光棉花 (甜點)", "福源花生醬 (東大路/甜點)", "神仙牛乳大王 (甜點)"]
+            }
+        ];
+        
+        // 將所有類別名稱提取出來用於初始顯示
+        const foodCategories = foodData.map(item => item.category); 
+
+        // 2. 獲取 DOM 元素
+        const spinButton = document.getElementById('spin-button');
+        const resultDisplay = document.getElementById('result-display');
+        const categoryListDisplay = document.getElementById('category-list');
+        const buttonText = document.getElementById('button-text');
+        
+        const finalRestaurantDisplay = document.getElementById('final-restaurant-display');
+        const chosenRestaurant = document.getElementById('chosen-restaurant');
+        const chosenCategoryText = document.getElementById('chosen-category-text');
+        const infoLinksContainer = document.getElementById('info-links-container');
+        const linkMap = document.getElementById('link-map');
+        
+        const mapContainer = document.getElementById('map-container');
+        const mapIframe = document.getElementById('map-iframe');
+
+        // 初始化顯示類別清單
+        categoryListDisplay.textContent = foodCategories.join(" · ");
+
+        /**
+         * 輔助函數：取得選中的餐期 (morning/noon/evening/late_night)
+         */
+        function getSelectedMealTime() {
+            const selectedRadio = document.querySelector('input[name="meal-time"]:checked');
+            return selectedRadio ? selectedRadio.value : null;
+        }
+
+        /**
+         * 3. 核心功能：執行轉盤邏輯
+         */
+        function startSpin() {
+            const selectedTime = getSelectedMealTime();
+            if (!selectedTime) {
+                alert("請先選擇想用餐的時段！");
+                return;
+            }
+
+            // 根據選中的時段過濾餐廳數據
+            const filteredFoodData = foodData.filter(item => item.meal_times.includes(selectedTime));
+            
+            if (filteredFoodData.length === 0) {
+                resultDisplay.textContent = "抱歉，該時段沒有適合的餐廳！";
+                resultDisplay.classList.remove('result-highlight');
+                finalRestaurantDisplay.classList.add('hidden');
+                infoLinksContainer.classList.add('hidden');
+                mapContainer.classList.add('hidden');
+                return;
+            }
+
+            // 禁用按鈕並啟動視覺效果
+            spinButton.disabled = true;
+            spinButton.classList.add('opacity-60', 'spin-active');
+            
+            // 隱藏結果區域
+            finalRestaurantDisplay.classList.add('hidden');
+            infoLinksContainer.classList.add('hidden');
+            mapContainer.classList.add('hidden');
+
+            resultDisplay.classList.remove('result-highlight');
+            buttonText.textContent = '決定中...';
+
+            let spinningInterval;
+            let spinCount = 0;
+            const maxSpins = 20; 
+            const duration = 2000; 
+            const intervalTime = duration / maxSpins; 
+
+            // 開始模擬快速閃爍/轉動 (使用過濾後的數據)
+            spinningInterval = setInterval(() => {
+                const tempIndex = Math.floor(Math.random() * filteredFoodData.length);
+                resultDisplay.textContent = filteredFoodData[tempIndex].category;
+                
+                spinCount++;
+
+                if (spinCount >= maxSpins) {
+                    clearInterval(spinningInterval);
+                    finishSpin(filteredFoodData);
+                }
+            }, intervalTime);
+        }
+
+        /**
+         * 4. 結束轉盤並顯示結果與資訊連結
+         * @param {Array} currentFoodData - 已經過濾的餐廳數據
+         */
+        function finishSpin(currentFoodData) {
+            // 隨機選出最終類別的索引 (從過濾後的數據中選取)
+            const finalIndex = Math.floor(Math.random() * currentFoodData.length);
+            const chosenDataItem = currentFoodData[finalIndex]; 
+            
+            const finalCategory = chosenDataItem.category;
+
+            // 從該類別的餐廳清單中，隨機選出一個餐廳
+            const restaurantsList = chosenDataItem.restaurants;
+            const restaurantIndex = Math.floor(Math.random() * restaurantsList.length);
+            const finalRestaurantName = restaurantsList[restaurantIndex];
+            
+            // 顯示結果
+            resultDisplay.textContent = finalCategory + "！";
+            resultDisplay.classList.add('result-highlight');
+
+            // 顯示最終餐廳名稱
+            chosenRestaurant.textContent = finalRestaurantName;
+            chosenCategoryText.textContent = `餐點類型：${finalCategory}`;
+            finalRestaurantDisplay.classList.remove('hidden');
+
+            // 重新啟用按鈕並移除效果
+            spinButton.disabled = false;
+            spinButton.classList.remove('opacity-60', 'spin-active');
+            buttonText.textContent = '再轉一次！';
+
+            // ***** 核心：地圖嵌入與連結 *****
+            const baseQuery = `新竹市 ${finalRestaurantName}`; 
+            
+            // 1. 嵌入地圖 (嘗試在同頁顯示)
+            const embedUrl = `https://maps.google.com/maps?q=${encodeURIComponent(baseQuery)}&z=14&output=embed`;
+            mapIframe.src = embedUrl;
+
+            // 2. 備用連結 (若嵌入失敗，可另開新頁)
+            linkMap.href = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(baseQuery)}`;
+
+            // 顯示地圖容器和單一備用連結
+            mapContainer.classList.remove('hidden');
+            infoLinksContainer.classList.remove('hidden');
+        }
+
+        // 5. 監聽按鈕點擊事件
+        spinButton.addEventListener('click', startSpin);
+
+    </script>
+</body>
+</html>
